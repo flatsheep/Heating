@@ -1,0 +1,668 @@
+<!doctype html>
+<html>
+<head>
+	<title>Astill Schedules</title>
+	<meta name="mobile-web-app-capable" content="yes">
+	<meta name="apple-mobile-web-app-capable" content="yes" />
+	<meta name="viewport" content="initial-scale=1.0,minimum-scale=1.0,maximum-scale=1.0,width=device-width,user-scalable=no" />
+	<meta name="viewport" content="minimal-ui">
+    
+	<link rel="apple-touch-icon" href="heating.png">
+    <link rel="icon" sizes="192x192" href="heating.png">
+	<link rel="stylesheet" href="jquery-ui.css">
+	<link rel="stylesheet" href="//code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.css">
+	<script src="jquery.js"></script>
+	<script src="jquery-ui.js"></script>
+	<script src="touch.js"></script>
+	<link href="/skins/flat/yellow.css" rel="stylesheet">
+	<script src="/skins/icheck.js"></script>
+	
+	<style>
+		@font-face {font-family: digital;src: url(font/DIGITALDREAM.ttf);	}
+		#alert {background: orange none repeat scroll 0 0;border: 3px solid white;color: red;font-family: digital;font-weight: bold;left: 383px;padding: 20px;position: absolute;top: 220px;}
+		.schedule {	border: 3px solid white;width: 770px;height: 32px;position: relative;display:inline-block;}
+		
+		.schedule-time
+		{
+			border: 1px solid green;
+			height: 20px;
+			position: absolute;
+			display: inline-block;
+			top:5px;
+			background: repeating-linear-gradient(
+			  45deg,
+			  #00FF00,
+			  #00FF00 1px,
+			  #FFF 1px,
+			  #FFF 4px
+			);
+			text-align: right;
+			color: green;
+		}
+		
+		.anchor	{font-size: 12pt;right: 3px !important;	}
+		* { -webkit-touch-callout: none; -webkit-user-select: none;	}
+		.schedule-holder { margin-top: 0px; margin-bottom: -8px; vertical-align:middle; }
+		.schedule-holder .title {display: inline-block; font-family: digital; margin-right: 10px; text-align: right; width: 154px; position:relative; top:-13px;}
+		#schedule-select { width: 100%;}
+		#selector {display:inline-block; float:right; margin-right: 40px; margin-top: 5px;}
+		#schedule-title { display: inline-block; font-family: digital; color: #55AA33; font-weight: bold; font-size: 20pt; margin-top:5px; margin-bottom:0; margin-left: 10px;}
+		.scheduleitem div, #scheduletitle div { display: inline-table; width: 150px; text-align: center; padding: 5px; }
+		.scheduleitem { border-bottom: 1px dotted white; }
+		.scheduleitem div:nth-child(1), #scheduletitle div:nth-child(1) { width: 200px !important; }
+		#scheduletitle { color: yellow; font-family: digital; border-bottom: 2px solid yellow; }
+		.scheduleitem { font-family: digital; }
+		.scheduleitem:hover { background-color: #333333; }
+		#scheduletitle div:nth-child(3), #scheduletitle div:nth-child(4), #scheduletitle div:nth-child(5) { width: 75px !important; }
+		.scheduleitem div:nth-child(3), .scheduleitem div:nth-child(4), .scheduleitem div:nth-child(5) { width: 75px !important; }
+		.clickable { cursor: pointer; }
+		.outer { position:absolute; width: 962px; height:526px; border: 0; margin:0; padding:0; }
+		body {margin:0; background-color: black; color:white;}
+		.timeline {	background-clip: border-box;background-image: url("image/timeline.png");background-position: 2px -16px;	background-repeat: no-repeat;background-size: 789px 42px;height: 29px;left: 156px;position: relative;top: 5px;width: 785px;}
+		#back-link a:link, #back-link a:hover, #back-link a:visited {text-decoration: none;color:green;}
+	</style>
+	
+	<script>
+		var mousedowntracker = false;
+		var touchstart = 0;
+		var xPos = 0;
+		var temp;
+		var days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+		var loadedSchedule;
+		var timeincrement;
+		var removeschedule = false;
+		
+		function boot()
+		{
+			$(function() 
+			{
+				for(var sch = 1; sch < 8; sch++)
+				{
+					$("#schedule" + sch).mousedown(function(e) 
+					{
+						mousedowntracker = setTimeout("addSchedule(" + e.offsetX + ", '#" + e.originalEvent.target.id + "');", 1000);
+					});
+					
+					$("#schedule" + sch).mouseup(function() 
+					{
+						if(mousedowntracker) clearTimeout(mousedowntracker);
+						mousedowntracker = false;
+					});
+					
+					$("#schedule" + sch).bind("touchstart", function(e) 
+					{
+						var theOffsetX = 0;
+						
+						theOffsetX = e.originalEvent.touches[0].clientX - e.originalEvent.originalTarget.offsetLeft;
+					
+						mousedowntracker = setTimeout("addSchedule(" + theOffsetX + ", '#" + e.originalEvent.target.id + "');", 1000);
+					});
+					
+					$("#schedule" + sch).bind("touchend", function() 
+					{
+						if(mousedowntracker) clearTimeout(mousedowntracker);
+						mousedowntracker = false;
+					});
+					
+					addListeners($("#schedule" + sch + " .schedule-time"));
+				}
+						
+				$( "#schedule-select" ).buttonset();
+				
+				$("#schedule-select input:radio").change(function(event, handler) 
+				{
+					switch(event.target.id)
+					{
+						case "schedule-select-7day":
+							$(".schedule-holder").each(function(index, element)
+							{
+								$(this).show({effect:"fade",duration:200});
+								$(this).children(".title").text(days[index]);
+							});
+							break;
+						
+						case "schedule-select-everyday":
+							$(".schedule-holder").each(function(index, element)
+							{
+								if(index > 0) $(this).hide({effect:"fade",duration:(100 * (7 - index))});
+								else $(this).children(".title").text("Everyday");
+							});
+							break;
+						
+						case "schedule-select-wkdyed":
+							$(".schedule-holder").each(function(index, element)
+							{
+								if(index > 1) 
+								{
+									$(this).hide({effect:"fade",duration:(100 * (7 - index))});
+								}	
+								else 
+								{
+									$(this).show("fade");
+								
+									switch(index)
+									{
+										case 0:
+											$(this).children(".title").text("Weekday");
+											break;
+										case 1:
+											$(this).children(".title").text("Weekend");
+											break;
+									}
+								}
+							});
+							break;
+					}
+				});
+				
+			});
+		}
+		
+		function LoadSchedule(scheduleid)
+		{
+			$(function()
+			{
+				$(".schedule-time").each(function()
+				{
+					$(this).remove();
+				});
+				
+				if(scheduleid != 0)
+				{				
+					$.ajax({
+						url: "schedules.asp?action=get&name=" + scheduleid,
+						dataType: 'json'
+					}).done(function(response) 
+					   {
+							if(response.ScheduleName)
+							{
+								loadedSchedule = response;
+								var i;
+								
+								for(i=0; i < response.Schedules.length; i++)
+								{
+									DrawSchedule(response.Schedules[i].Day, response.Schedules[i].TimeFrom, response.Schedules[i].TimeTo);
+								}
+								
+								$("#schedule-title").text(response.ScheduleName);
+								
+								switch(response.Type)
+								{
+									case "7day":
+										$("#schedule-select-7day").trigger("click");
+										break;
+									case "everyday":
+										$("#schedule-select-everyday").trigger("click");
+										break;
+									case "weekdayweekend":
+										$("#schedule-select-wkdyed").trigger("click");
+										break;
+								}
+							}
+					   });
+				}
+			});
+		}
+		
+		function DrawSchedule(day, timefrom, timeto)
+		{
+			$(function()
+			{	
+				
+				var where = $("#schedule" + day);
+				timeincrement = Math.round(where.width()-2,0) / 24;
+				var tfrom = parseInt(timefrom.split(":")[0]) + timefrom.split(":")[1] / 60;
+				var tto = parseInt(timeto.split(":")[0]) + timeto.split(":")[1] / 60;
+				
+				var newelem = $("<span class='schedule-time' style=''><span class='anchor ui-resizable-handle ui-resizable-e'>|</span></span>").appendTo(where); 
+				newelem.width((tto - tfrom) * timeincrement);
+				newelem.css("left", (tfrom * timeincrement) + "px");
+				addListeners(newelem);
+			});
+		}
+		
+		function SaveSchedule()
+		{
+			var schedule = new Object();
+			var schedules = new Array();
+			var scheduleday;
+		
+			$(function()
+			{
+				schedule.ScheduleID = loadedSchedule.ScheduleID;
+			
+				switch($("input[type='radio'][name='radio']:checked").attr("id"))
+				{
+					case "schedule-select-7day":
+						schedule.Type = "7day";
+						break;
+					case "schedule-select-everyday":
+						schedule.Type = "everyday";
+						break;
+					case "schedule-select-wkdyed":
+						schedule.Type = "weekdayweekend";
+						break;
+				}
+				
+				var width, left, tfrom, tto;
+				
+				$(".schedule-time").each(function(index, element)
+				{
+					scheduleday = new Object();
+					scheduleday.Day = element.parentNode.id.match(/\d+/)[0];
+					
+					width = Math.round($(this).width(), 0);
+					left = Math.round(parseInt($(this).css("left").replace("px", "")), 0);
+					
+					tfrom = left / timeincrement;
+					tfrom = (Math.round(tfrom * 2) / 2).toFixed(1)
+					tto = (width + left) / timeincrement;
+					tto = (Math.round(tto * 2) / 2).toFixed(1)
+					
+					scheduleday.TimeFrom = parseInt(tfrom) + ":" + pad((tfrom-parseInt(tfrom))*60);
+					
+					if(tto == 24) scheduleday.TimeTo = "23:59";
+					else scheduleday.TimeTo = parseInt(tto) + ":" + pad((tto-parseInt(tto))*60);
+					
+					schedules.push(scheduleday);
+				});
+				
+				schedule.Schedules = schedules;
+				$.ajax({
+					success: function(response) 
+							 { 
+								if(response == "ok") 
+								{
+									$('body').append('<div style="z-index:100;" id="alert">ALL data was saved</div>');
+									$('#alert').fadeOut(2000, function(){$('#alert').remove();})
+								}
+							 },
+					type: "POST",
+					url: "schedules.asp?action=set&name=" + loadedSchedule.ScheduleName,
+					data: { data : JSON.stringify(schedule) }
+				});
+			});
+		}
+		
+		function pad(what)
+		{
+			if(what.length == 1 || what == 0)
+			{
+				return "0" + what;
+			}
+			else
+			{
+				return what;
+			}
+		}
+		
+		var dragged = false;
+		
+		function addListeners(what)
+		{
+			$(function() 
+			{
+				what.draggable(
+				{
+					axis: "x",
+					containment: "parent",
+					grid: [timeincrement/2, 0]
+					//stop: function(event, ui) {
+					//	x = 1;
+					//}
+				});
+				
+				what.resizable(
+				{
+					axis: "x",
+					grid: [(timeincrement/2)+1, 0],
+					containment: "parent",
+					maxHeight: 20,
+					minHeight: 20,
+					minWidth: timeincrement,
+					handles: "e"
+				});
+				
+				what.mousedown(function(e) 
+				{
+					e.stopPropagation();
+				});
+				
+				what.mouseup(function(e)
+				{
+					$(this).css("top", "5px");
+				});
+				
+				what.bind("touchstart", function(event) 
+				{
+					touchstart = (new Date()).getTime();
+					removeschedule = setTimeout(function()
+												{
+													if(!dragged) if(confirm('Remove schedule?')) event.currentTarget.remove()
+												}, 2000);
+					event.stopPropagation();
+				});
+				
+				what.bind("touchmove", function(event)
+				{
+					dragged = true;
+				});
+				
+				what.bind("touchend", function(e)
+				{
+					$(this).css("top", "5px");
+					dragged = false;
+					if(removeschedule) clearTimeout(removeschedule);
+				});
+				
+				what.dblclick(function(event, handler)
+				{
+					if(confirm("Remove schedule?")) event.currentTarget.remove();
+				});
+
+			});
+			
+		}
+		
+		
+		function addSchedule(newPos, where)
+		{
+			$(function() 
+			{
+				newPos = parseInt(newPos/(timeincrement/2)) * (timeincrement/2);
+			
+				newelem = $("<span class='schedule-time' style='width: 60px; left:" + newPos + "px;'><span class='anchor ui-resizable-handle ui-resizable-e'>|</span></span>").appendTo(where); 
+				//newelem.addClass("schedule-time");
+				addListeners(newelem);
+			});
+		}
+		
+		function loadScheduleList()
+		{
+			var scheduleIndex;
+		
+			$.ajax({
+				url: "schedules.asp?action=list&name=0",
+				dataType: 'json'
+			}).done(function(response) 
+			   {
+					clearScheduleList();
+					
+					var text;
+					
+					for(scheduleIndex = 0; scheduleIndex < response.ScheduleList.length; scheduleIndex++)
+					{
+						text = "<div class='scheduleitem' id='scheduleid" + response.ScheduleList[scheduleIndex].ScheduleID + "'>";
+						text += "<div class='editschedule clickable'>" + response.ScheduleList[scheduleIndex].ScheduleName + "</div>";
+						
+						switch(response.ScheduleList[scheduleIndex].Type)
+						{
+							case "7day":
+								text += "<div>7 Day</div>";
+								break;
+							case "weekdayweekend":
+								text += "<div>Wkday/Wkend</div>";
+								break;
+							case "everyday":
+								text += "<div>Everyday</div>";
+								break;
+						}
+						
+						if(response.ScheduleList[scheduleIndex].DateFrom == null) text += "<div style='width:90px; font-size:8pt;'>-</div>";
+						else text += "<div style='width:90px; font-size:8pt;'>" + formatdate(response.ScheduleList[scheduleIndex].DateFrom) + "</div>";
+						
+						if(response.ScheduleList[scheduleIndex].DateTo == null) text += "<div style='width:90px; font-size:8pt;'>-</div>";
+						else text += "<div style='width:90px; font-size:8pt;'>" + formatdate(response.ScheduleList[scheduleIndex].DateTo) + "</div>";
+						
+						if(response.ScheduleList[scheduleIndex].Active) text += "<div style='color: green;'>&#10004;</div>";
+						else text += "<div style='color: red;'>&#x2717;</div>";
+						
+						if(response.ScheduleList[scheduleIndex].Temporary) text += "<div style='color: green;'>&#10004;</div>";
+						else text += "<div style='color: red;'>&#x2717;</div>";
+						
+						text += "<div class='edit clickable' style='width: 40px; font-size: 10px;'>edit</div><div class='delete clickable' style='width: 40px; font-size: 10px;'>delete</div>";
+						
+						text += "</div>";
+						$(text).appendTo($("#schedule-list"));
+					}
+					
+					$(".scheduleitem .editschedule").click( 
+						function(event)
+						{
+							$("#schedule-list").fadeOut(500);
+							$("#edit-schedule").fadeIn(1000);
+							
+							LoadSchedule(event.target.parentElement.id.match(/\d+/)[0]);
+						});
+						
+					$(".scheduleitem .edit").click( 
+						function(event)
+						{
+							editprofile(event);
+						});
+						
+					$(".scheduleitem .delete").click(
+						function(event)
+						{
+							if(confirm('Delete profile?'))
+							{
+								deleteprofile(event);
+							}
+						});
+			   });
+		}
+		
+		function formatdate(thedate)
+		{
+			var splitdate;
+			
+			thedate = thedate.split("T")[0];
+			splitdate = thedate.split("-");
+			return splitdate[2] + "/" + splitdate[1] + "/" + splitdate[0].substring(2,4);
+		}
+		
+		function editprofile(which)
+		{
+			cleareditprofile();
+		
+			$.ajax({
+				url: "schedules.asp?action=getprofile&name=" + which.target.parentElement.id.match(/\d+/)[0],
+				dataType: 'json'
+			}).done(function(response) {
+			
+				$("#method").text("Update");
+				$("#profile-scheduleid").val(response.ScheduleProfile[0].ScheduleID);
+				$("#add-edit-schedule #title").val(response.ScheduleProfile[0].ScheduleName);
+				$("#add-edit-schedule #description").val(response.ScheduleProfile[0].Description);
+				
+				if(response.ScheduleProfile[0].Active) $('#add-edit-schedule #active').iCheck('check');
+				else $('#add-edit-schedule #active').iCheck('uncheck');
+				
+				if(response.ScheduleProfile[0].Temporary) 
+				{
+					$('#add-edit-schedule #temp').iCheck('check');
+					if(response.ScheduleProfile[0].DateFrom != null) $("#add-edit-schedule #datefrom").val(response.ScheduleProfile[0].DateFrom.split("T")[0]);
+					if(response.ScheduleProfile[0].DateTo != null) $("#add-edit-schedule #dateto").val(response.ScheduleProfile[0].DateTo.split("T")[0]);
+				}
+				else 
+				{
+					$('#add-edit-schedule #temp').iCheck('uncheck');
+				}
+			
+				$("#add-edit-schedule").fadeIn(500);
+			});
+		}
+		
+		function saveprofile()
+		{
+			var Profile = new Object();
+			
+			$(function(){
+				Profile.ScheduleID = $("#profile-scheduleid").val();
+				Profile.Title = $("#add-edit-schedule #title").val();
+				Profile.Description = $("#add-edit-schedule #description").val();
+				Profile.Temporary = $("#add-edit-schedule #temp").prop("checked");
+				Profile.Active = $("#add-edit-schedule #active").prop("checked");
+				Profile.DateFrom = $("#add-edit-schedule #datefrom").val();
+				Profile.DateTo = $("#add-edit-schedule #dateto").val();
+			
+				if(Profile.Title.length == 0 || Profile.Description.length == 0)
+				{
+					alert("Please provide a title and a description.");
+					return;
+				}
+			
+				$.ajax({
+					success: function(response) 
+							 { 
+								if(response == "ok") 
+								{
+									$("#add-edit-schedule").fadeOut(500);
+									clearScheduleList();
+									loadScheduleList();
+								}
+							 },
+					type: "POST",
+					url: "schedules.asp?action=saveprofile&name=" + Profile.ScheduleID,
+					data: { data : JSON.stringify(Profile) }
+				});
+			
+			});
+		}
+		
+		function cleareditprofile()
+		{
+			$("#profile-scheduleid").val("0");
+			$("#method").text("Add");
+			$("#add-edit-schedule #title").val("");
+			$("#add-edit-schedule #description").val("");
+			$('#add-edit-schedule #active').iCheck('check');
+			$('#add-edit-schedule #temp').iCheck('uncheck');
+			$("#add-edit-schedule #datefrom").val("");
+			$("#add-edit-schedule #dateto").val("");
+		}
+		
+		function deleteprofile(which)
+		{
+			$(function()
+			{
+				$.ajax({
+					url: "schedules.asp?action=delete&name=" + which.target.parentElement.id.match(/\d+/)[0]
+				}).done(function(response) 
+				   {
+						$("#schedule-list #" + which.target.parentElement.id).fadeOut(500);
+				   });
+			});
+		}
+		
+		function clearScheduleList()
+		{
+			$(function()
+			{
+				$("#schedule-list .scheduleitem").each(function(index, element) 
+													{
+														$(this).remove();
+													});
+			});
+		}
+		
+		function CancelEdit()
+		{
+			$("#edit-schedule").fadeOut(500);
+			$("#schedule-list").fadeIn(1000);
+		}
+		
+		$(document).ready(function(){
+		  $('#add-edit-schedule input').iCheck({
+			checkboxClass: 'icheckbox_flat-yellow'
+		  });
+		  $( "#add-edit-schedule #datefrom" ).datepicker({
+			minDate: 0,
+			dateFormat: "yy-mm-dd"
+		  });
+		  $( "#add-edit-schedule #dateto" ).datepicker({
+			minDate: 0,
+			dateFormat: "yy-mm-dd"
+		  });
+
+		  $('#add-edit-schedule #temp').on('ifChanged', function(event)
+			{
+				if(event.currentTarget.checked) 
+				{
+					$("#add-edit-schedule .temp-dates").fadeIn(500);
+				}
+				else  
+				{
+					$("#add-edit-schedule .temp-dates").fadeOut(500);
+					$("#add-edit-schedule #datefrom").val("");
+					$("#add-edit-schedule #dateto").val("");
+					
+				}
+			});
+			
+		  $('#add-edit-schedule #active').on('ifChanged', function(event)
+			{
+			  if(event.currentTarget.checked) $("#active-label").css("color", "#00C600");
+			  else $("#active-label").css("color", "white");
+			});
+		
+			$(".addnew").click(function(event)
+			{
+				cleareditprofile();
+				$("#method").text("Add");
+				$("#add-edit-schedule").fadeIn(500);
+				$("#add-edit-schedule input")[1].focus();
+			});
+		});
+		
+		function cancelAddSchedule()
+		{
+			$("#add-edit-schedule").fadeOut(500);
+		}
+		
+	</script>
+</head>
+
+<body onload="loadScheduleList(); boot();">
+<div id="back-link" style="position:absolute; font-family: Verdana; z-index: 10; top:6px;left:2px;font-size: 10pt;"><a href="house.html">&#8592; BACK</a></div> 
+<div class="outer" id="edit-schedule" style="display: none;z-index:20; background-color:black;">
+	<div id="schedule-select">
+		<p id="schedule-title">Schedule</p>
+		<div id="selector">
+			<input type="radio" id="schedule-select-everyday" name="radio"><label for="schedule-select-everyday">Everyday</label>
+			<input type="radio" id="schedule-select-7day" name="radio"><label for="schedule-select-7day">7 Day</label>
+			<input type="radio" id="schedule-select-wkdyed" name="radio"><label for="schedule-select-wkdyed">Weekday/Weekend</label>
+		</div>
+	</div>
+
+	<div class="schedule-holder" style="margin-top:8px;"><div class="timeline"></div><span class="title">Monday</span><div id="schedule1" class="schedule"></div></div>
+	<div class="schedule-holder"><div class="timeline"></div><span class="title">Tuesday</span><div id="schedule2" class="schedule"></div></div>
+	<div class="schedule-holder"><div class="timeline"></div><span class="title">Wednesday</span><div id="schedule3" class="schedule"></div></div>
+	<div class="schedule-holder"><div class="timeline"></div><span class="title">Thursday</span><div id="schedule4" class="schedule"></div></div>
+	<div class="schedule-holder"><div class="timeline"></div><span class="title">Friday</span><div id="schedule5" class="schedule"></div></div>
+	<div class="schedule-holder"><div class="timeline"></div><span class="title">Saturday</span><div id="schedule6" class="schedule"></div></div>
+	<div class="schedule-holder"><div class="timeline"></div><span class="title">Sunday</span><div id="schedule7" class="schedule"></div></div>
+	<div class="save-back"><button onclick="SaveSchedule();">SAVE</button><button onclick="CancelEdit();">BACK</button></div>
+</div>
+<div class="outer" id="schedule-list">
+	<div id="scheduletitle"><div>Title</div><div>Recurrence</div><div style="width:90px;">From</div><div style="width:90px;">To</div><div>Active</div><div>Temp</div><div class="addnew clickable" style="color:green; font-size: 8pt;">+ Add Profile</div></div>
+</div>
+
+<style> 
+	#add-edit-schedule { display:none; font-weight: bold; font-family: verdana; font-size: 9pt; background-color: #750000; position: absolute; padding: 20px; border-radius: 15px; border: 2px dotted yellow; top: 100px; left: 375px; }
+	#add-edit-schedule div { margin-top: 10px; margin-bottom: 10px; }
+	.save-back { position: absolute; left: 345px; top: 3px; }
+	.save-back button { background-color: #3d4af8;border: 0 none;color: white;margin-left: 10px;height: 39px; border-radius: 9px;}
+	</style>
+
+<div id="add-edit-schedule">
+	<input type="hidden" id="profile-scheduleid" value="0" />
+	<div style="font-family: digital; color: yellow; font-size: 15pt;"><span id="method">Add</span> Schedule</div>
+	<div>Name: <input type="text" id="title" style="width: 172px;" /></div>
+	<div>Description:<br /><textarea id="description" style="width:218px; margin-top: 5px;"></textarea></div>
+	<div style="margin:0;"><span id="active-label" style="color: #00C600;">Active?</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <input type="checkbox" id="active" checked /></div>
+	<div style="margin-bottom:-10px; margin-top:-10px;">Temporary?  <input id="temp" type="checkbox" /></div>
+	<div class="temp-dates" style="display: none;">From Date: <input type="text" id="datefrom" style="width: 120px;" /></div>
+	<div class="temp-dates" style="display: none;">To Date :<input type="text" id="dateto" style="width: 120px; margin-left: 17px;" /></div>
+	<div style="text-align:right; padding-top: 10px;"><button onclick="saveprofile()">Save</button><button onclick="cancelAddSchedule();">Cancel</button></div>
+</div>

@@ -1,0 +1,59 @@
+<html>
+<head>
+	<script src="jquery.js"></script>
+	<script type="text/javascript" src="jquery.knob.min.js"></script>
+	
+	<script type="text/javascript">
+		var tempval = 20;
+		
+		var tempColor = {10:"#0000FF", 11:"#0000DD", 12:"#0022BB", 13:"#004499", 14:"#006677", 15:"#006677", 16:"#006677", 17:"#006677",
+						 18:"#008855", 19:"#00AA55", 20:"#00CC33", 21:"#00DD22", 22:"#22DD00", 23:"#44BB00", 24:"#669900", 25:"#887700",
+						 26:"#AA5500", 27:"#CC3300", 28:"#DD5500", 29:"#EE3300", 30:"#FF0000"
+		};
+		
+		$(function() {
+			$(".dial").knob({
+				'min':10,
+				'max':30,
+				'change':function(v)
+				{
+					
+					if((40-Math.round(v,0)) != tempval) 
+					{
+						tempval = (40-Math.round(v,0));
+						//console.log(tempval);
+						
+						$('.dial').trigger(
+						 'configure',
+						{
+							"bgColor":tempColor[tempval],
+							"fgColor":tempColor[tempval]
+						});
+						
+						$("#settemp").css('color', tempColor[tempval]);
+						$("#settemp").text(tempval);
+					}
+				}
+			});
+		});
+	</script>
+	
+	<style>
+		#settemp { font-family: Verdana; font-size: 20pt; left: 85px; position: relative; top: -138px; font-weight: bold;  z-index: 1; width: 40px; }
+		.dial { z-index: 2; }
+		.tempscale { font-family: Verdana; font-size: 7pt; position: relative; z-index: 1; width: 35px;}
+		#thermostat { position: absolute; } 
+	</style>
+</head>	
+	
+<body>
+	<div id="thermostat">
+		<input type="text" val="20" min="10" max="30" value="20" class="dial" data-fgColor="#66CC66" data-angleOffset=55 data-angleArc=250 data-cursor=true data-displayInput="false" />
+		<div id="settemp">20</div>
+		<div style="left: 137px; top: -50px; transform: rotate(-30deg);" class="tempscale">22</div>
+		<div style="left: -4px; top: -89px; transform: rotate(65deg);" class="tempscale">15</div>
+		<div style="left: 157px; top: -222px; color:#FF0000; transform: rotate(-33deg);" class="tempscale">30</div>
+		<div style="left: 26px; top: -223px; color:#0000FF; transform: rotate(38deg);" class="tempscale">10</div>
+	</div>
+</body>
+</html>

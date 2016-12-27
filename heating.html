@@ -1,0 +1,207 @@
+<html>
+<head>
+
+    <script>
+
+		function HeatingManager(address, port, retry)
+		{
+			this.websocket = null;
+			this.address = address;
+			this.port = port;
+			this.retry = retry;
+			this.connected = null;
+			this.debug = true;
+			this.zones = false;
+			this.attempts = 0;
+		}
+
+		HeatingManager.prototype.connect = function()
+		{
+			if(this.connected != null)
+			{
+				if (!this.connected()) return;
+			}
+
+			if(this.websocket == null || this.websocket.readyState == 0)
+			{
+				try
+				{
+					this.websocket = new WebSocket("ws://" + this.address + ":" + this.port);
+				}
+				catch(e)
+				{
+					setTimeout(function() { hm.connect(); }, 1000);
+				}
+
+				this.websocket.onopen = this.onconnect;
+				this.websocket.onclose = this.ondisconnect;
+				this.websocket.onmessage = this.onreceive;
+				this.websocket.onerror = this.onerror;
+				this.connected = function () {
+					return (this.websocket.readyState == 1);
+				};
+			}
+
+			if(this.websocket.readyState != 1)
+			{
+				if(this.retry == 0 || this.attempts <= this.retry)
+				{
+					setTimeout(function () {
+						hm.connect();
+					}, 1000);
+					this.attempts += 1;
+				}
+
+				console.debug("didn't connect, will call back: readyState=" + this.websocket.readyState);
+			}
+			else
+			{
+				console.debug("connected!");
+			}
+		};
+
+		HeatingManager.prototype.onconnect = function(e)
+		{
+			hm.RetrieveZoneData();
+		};
+
+		HeatingManager.prototype.ondisconnect = function(e)
+		{
+			hm.attempts = 0;
+			this.websocket = null;
+		};
+
+		HeatingManager.prototype.onreceive = function(e)
+		{
+			var zoneJSON = null;
+
+			try
+			{
+				zoneJSON = JSON.parse(e.data);
+			}
+			catch(e) {
+				return;
+			}
+
+			switch(zoneJSON.event)
+			{
+				case "changes":
+					var z = zoneJSON.zones.zone;
+
+					console.debug("name: " + hm.zones[z.number].zonename);
+
+					if(typeof(z['status']) != 'undefined')
+					{
+						hm.zones[z.number].status = z.status.now;
+						hm.zones[z.number].modes = z.modes;
+						console.debug("Mode change: keypad -> " + z.modes.keypadon + ", keylock -> " + z.modes.keylock + ", frostmode -> " + z.modes.frostmode + ", heating -> " + z.modes.heatingon + ", hotwater -> " + z.modes.hotwater);
+						console.debug("Status: " + z.status.now);
+					}
+
+					if(typeof(z['set-temp']) != 'undefined')
+					{
+						hm.zones[z.number].settemp = z['set-temp'].now;
+						console.debug("Set temp changed, was: " + z['set-temp'].was + ", now: " + z['set-temp'].now);
+					}
+
+					if(typeof(z['act-temp']) != 'undefined')
+					{
+						hm.zones[z.number].acttemp = z['act-temp'].now;
+						console.debug("Actual temp changed, was: " + z['act-temp'].was + ", now: " + z['act-temp'].now);
+					}
+
+					break;
+				case "zoneinfo":
+					hm.zones = zoneJSON.zones;
+					setTimeout(function() {hm.onzonespopulated()},1500);
+					break;
+			}
+		};
+
+		HeatingManager.prototype.onerror = function (e)
+		{
+
+		};
+
+		HeatingManager.prototype.onzonespopulated = function()
+		{
+			if(hm.zones.length == 0)
+			{
+				console.debug("zones was empty, calling again.");
+				hm.RetrieveZoneData();
+			}
+			console.debug("zones populated.");
+
+			document.getElementById("studyset").value = hm.zones["2"].settemp;
+		};
+
+		HeatingManager.prototype.SetZoneTemperature = function(zoneid, temp)
+		{
+			if(this.connected == null) return;
+			if(!this.connected())
+			{
+				console.debug("in SetZoneTemp, wasn't connected.");
+				return;
+			}
+
+			var heating = {};
+			heating.command = "zonesettemp";
+			heating.zoneid = zoneid;
+			heating.temp = temp;
+			this.websocket.send(JSON.stringify(heating));
+		};
+
+		HeatingManager.prototype.RetrieveZoneData = function()
+		{
+			if(this.connected == null) return;
+			if(!this.connected())
+			{
+				console.debug("in RetrieveZoneData, wasn't connected.");
+				return;
+			}
+
+			var heating = {};
+			heating.command = "zoneinfo";
+			heating.zones = ['*'];
+			this.websocket.send(JSON.stringify(heating));
+		};
+
+		HeatingManager.prototype.ChangeMode = function(zoneid, keypadon, keylockon, frostmode, hotwateron)
+		{
+			var zone = this.zones[zoneid];
+
+			if(typeof(hotwateron) === 'undefined' || hotwateron == null) hotwateron = zone.modes.hotwater;
+			if(typeof(frostmode) === 'undefined' || frostmode == null) frostmode = zone.modes.frostmode;
+			if(typeof(keylockon) === 'undefined' || keylockon == null) keylockon = zone.modes.keylock;
+			if(keypadon == null) keypadon = zone.modes.keypadon;
+
+			var heating = {};
+			heating.command = "zonemode";
+			heating.zoneid = zoneid;
+			heating.keypadon = keypadon;
+			heating.keylockon = keylockon;
+			heating.frostmode = frostmode;
+			heating.hotwateron = hotwateron;
+			this.websocket.send(JSON.stringify(heating));
+		};
+
+		var hm = new HeatingManager("localhost", 9999, 0);
+
+		function getAllZones()
+		{
+			document.getElementById("output").value = JSON.stringify(hm.zones);
+		}
+    </script>
+</head>
+
+<body onload="document.getElementById('output').value = '';">
+<p>
+	<input type="text" id="studyset" />
+	<button onclick="getAllZones();">Get Zone Info</button>
+
+	<button onclick="hm.connect();">Connect</button><button onclick="hm.websocket.close();">Disconnect</button>
+	<p>
+	<textarea rows="30" cols="100" id="output"></textarea>
+	</p>
+</body>
+</html>
